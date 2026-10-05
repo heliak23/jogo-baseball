@@ -36,6 +36,28 @@ enum MatchState {
 @export var display_settings: Node
 @export var game_camera: Camera2D
 
+@export_group("CPU Batter AI (Dificuldade)")
+## Chance da CPU tentar o swing em bolas DENTRO da Strike Zone (0.0 = deixa passar, 1.0 = sempre tenta)
+@export_range(0.0, 1.0, 0.05) var cpu_swing_chance_strike: float = 0.75
+
+## Chance da CPU tentar o swing em bolas FORA da Strike Zone (perseguindo arremesso ruim)
+@export_range(0.0, 1.0, 0.05) var cpu_swing_chance_ball: float = 0.22
+
+## Chance base da CPU acertar o swing e fazer contato. Se falhar, dá MISS (Swing no vazio / Strike)
+@export_range(0.0, 1.0, 0.05) var cpu_hit_chance: float = 0.65
+
+## Chance do contato da CPU ser Foul Ball (bola fora) em vez de bola em jogo
+@export_range(0.0, 1.0, 0.05) var cpu_foul_chance: float = 0.28
+
+## Dificuldade/Penalidade de contato para Fastball (bola rápida)
+@export_range(0.0, 0.5, 0.02) var cpu_fastball_difficulty: float = 0.06
+
+## Dificuldade/Penalidade de contato para Curveball (curva acentuada)
+@export_range(0.0, 0.5, 0.02) var cpu_curveball_difficulty: float = 0.16
+
+## Dificuldade/Penalidade de contato para Changeup (quebra de ritmo)
+@export_range(0.0, 0.5, 0.02) var cpu_changeup_difficulty: float = 0.12
+
 var current_state: MatchState = MatchState.AT_BAT
 
 # Contadores da partida
@@ -229,35 +251,90 @@ func _on_pitch_released(type: int, start_pos: Vector2, target_pos: Vector2) -> v
 	if is_top_inning:
 		_plan_cpu_swing(type, target_pos)
 
+func _calculate_cpu_swing_probability(pitch_type: int, is_in_zone: bool = true) -> float:
+	var base_chance = cpu_swing_chance_strike if is_in_zone else cpu_swing_chance_ball
+	# Fastball tem leitura mais direta; Curveball e Changeup geram maior hesitação
+	match pitch_type:
+		1: # Fastball
+			return clampf(base_chance, 0.05, 1.0)
+		2: # Curveball
+			return clampf(base_chance - 0.14, 0.05, 1.0)
+		3: # Changeup
+			return clampf(base_chance - 0.08, 0.05, 1.0)
+		_:
+			return clampf(base_chance, 0.05, 1.0)
+
+func _calculate_cpu_contact_probability(pitch_type: int, target_pos: Vector2) -> float:
+	var prob = cpu_hit_chance
+
+	# Penalidade pelo tipo de arremesso arremessado pelo Player
+	match pitch_type:
+		1: # Fastball: velocidade rápida dificulta o timing
+			prob -= cpu_fastball_difficulty
+		2: # Curveball: trajetória em arco quebra o plano de swing
+			prob -= cpu_curveball_difficulty
+		3: # Changeup: variação repentina de velocidade engana o batedor
+			prob -= cpu_changeup_difficulty
+
+	# Penalidade por arremessos nos cantos ou fora do centro do Home Plate (eixo X=640)
+	var dx = absf(target_pos.x - 640.0)
+	if dx > 14.0:
+		var edge_penalty = clampf((dx - 14.0) / 36.0 * 0.16, 0.0, 0.20)
+		prob -= edge_penalty
+
+	return clampf(prob, 0.05, 0.98)
+
 func _plan_cpu_swing(pitch_type: int, target_pos: Vector2) -> void:
-	# Verifica se a bola vai cruzar a strike zone
+	# 1. Avalia se o arremesso está na Strike Zone
 	var is_in_zone = Baseball.STRIKE_ZONE_RECT.has_point(target_pos)
-	
-	# Probabilidade da CPU dar swing
-	var swing_prob = 0.84 if is_in_zone else 0.26
+
+	# 2. Probabilidade de Decisão: a CPU decide se vai ao swing ou deixa passar
+	var swing_prob = _calculate_cpu_swing_probability(pitch_type, is_in_zone)
 	if randf() > swing_prob:
-		# CPU decidiu deixar passar (esperando Ball ou Called Strike)
+		# CPU decidiu NÃO rebater (Take Pitch) -> resultará em Called Strike ou Ball
 		return
 
-	# Tempo estimado do arremesso
+	# Tempo estimado do arremesso até o Home Plate
 	var pitch_duration = 0.46
 	if pitch_type == 2: pitch_duration = 0.62
 	elif pitch_type == 3: pitch_duration = 0.72
 
-	# Momento ideal do swing do taco: 0.10s antes da bola cruzar o plate
-	var ideal_swing_delay = maxf(pitch_duration - 0.10, 0.05)
-	
-	# Ruído humano na IA da CPU
-	var noise = 0.0
-	if pitch_type == 1: # Fastball
-		noise = randf_range(-0.025, 0.025)
-	elif pitch_type == 2: # Curveball
-		noise = randf_range(-0.05, 0.05)
-	elif pitch_type == 3: # Changeup (tende a adiantar o swing)
-		noise = randf_range(0.04, 0.09)
+	# Momento ideal do swing para contato perfeito (0.10s antes da bola cruzar o plate)
+	var ideal_swing_delay = maxf(pitch_duration - 0.10, 0.04)
 
-	var actual_delay = maxf(ideal_swing_delay - noise, 0.02)
-	cpu_swing_timer = get_tree().create_timer(actual_delay)
+	# 3. Probabilidade de Contato: a CPU acerta ou erra o swing (MISS)?
+	var contact_prob = _calculate_cpu_contact_probability(pitch_type, target_pos)
+	var makes_contact = (randf() <= contact_prob)
+
+	var swing_delay = ideal_swing_delay
+
+	if not makes_contact:
+		# ERRO DA CPU: Swing no vazio (MISS / Strikeout)!
+		# Induzimos um erro proposital de timing (+-0.14s a +-0.18s) para que o taco passe
+		# muito antes ou muito depois da bola, sem encostar nela.
+		var miss_error = randf_range(0.14, 0.18)
+		if randf() < 0.5:
+			# Swing adiantado no vazio (taco cruza antes da bola chegar)
+			swing_delay = maxf(ideal_swing_delay - miss_error, 0.02)
+		else:
+			# Swing atrasado no vazio (bola já cruzou e o taco chega tarde)
+			swing_delay = ideal_swing_delay + miss_error
+	else:
+		# Contato bem-sucedido: testa se será Foul Ball ou bola em jogo (Fair)
+		var is_foul = (randf() <= cpu_foul_chance)
+		if is_foul:
+			# Induz erro de timing moderado (+-0.085s) para puxar ou empurrar para fora da linha (Foul)
+			var foul_error = randf_range(0.08, 0.10)
+			if randf() < 0.5:
+				swing_delay = maxf(ideal_swing_delay - foul_error, 0.03) # Puxada para Foul na esquerda
+			else:
+				swing_delay = ideal_swing_delay + foul_error # Empurrada para Foul na direita
+		else:
+			# Rebatida em jogo (Fair Ball): timing próximo do ideal com pequeno ruído natural
+			var natural_noise = randf_range(-0.025, 0.025)
+			swing_delay = maxf(ideal_swing_delay + natural_noise, 0.03)
+
+	cpu_swing_timer = get_tree().create_timer(swing_delay)
 	cpu_swing_timer.timeout.connect(func():
 		if current_state == MatchState.PITCH and not has_swung and batter:
 			batter.start_swing()

@@ -1,3 +1,9 @@
-# Godot 4+ specific ignores
+﻿# Godot 4+ specific ignores
 .godot/
 /android/
+
+# Builds e binários de distribuição (não versionar no Git devido ao limite de 100MB do GitHub)
+build/
+*.exe
+*.pck
+*.zip

@@ -11,6 +11,7 @@ var is_fullscreen: bool = false
 
 func _ready() -> void:
 	_force_window_stretch_scaling()
+	_apply_window_icon()
 	load_display_settings()
 	
 	# Escuta mudanças no tamanho da janela (ex: quando o jogador clica em Maximizar no Windows)
@@ -19,6 +20,14 @@ func _ready() -> void:
 		win.size_changed.connect(_on_window_size_changed)
 
 	call_deferred("_notify_initial_state")
+
+func _apply_window_icon() -> void:
+	var path = "res://icon.png"
+	if FileAccess.file_exists(path):
+		var img = Image.new()
+		var err = img.load(path)
+		if err == OK:
+			DisplayServer.set_icon(img)
 
 func _force_window_stretch_scaling() -> void:
 	var win = get_window()
