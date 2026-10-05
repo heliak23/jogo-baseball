@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/players/catcher.gd" id="1_catcher"]
+
+[node name="Catcher" type="Node2D"]
+position = Vector2(640, 622)
+script = ExtResource("1_catcher")

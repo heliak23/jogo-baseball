@@ -1,0 +1,42 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/defense_manager.gd" id="1_dm"]
+[ext_resource type="PackedScene" path="res://scenes/players/fielder.tscn" id="2_fielder"]
+
+[node name="DefenseManager" type="Node2D"]
+script = ExtResource("1_dm")
+
+[node name="FirstBaseman" parent="." instance=ExtResource("2_fielder")]
+position = Vector2(770, 460)
+fielder_name = "First Baseman"
+base_position = Vector2(770, 460)
+
+[node name="SecondBaseman" parent="." instance=ExtResource("2_fielder")]
+position = Vector2(695, 360)
+fielder_name = "Second Baseman"
+base_position = Vector2(695, 360)
+
+[node name="Shortstop" parent="." instance=ExtResource("2_fielder")]
+position = Vector2(585, 360)
+fielder_name = "Shortstop"
+base_position = Vector2(585, 360)
+
+[node name="ThirdBaseman" parent="." instance=ExtResource("2_fielder")]
+position = Vector2(510, 460)
+fielder_name = "Third Baseman"
+base_position = Vector2(510, 460)
+
+[node name="LeftFielder" parent="." instance=ExtResource("2_fielder")]
+position = Vector2(320, 220)
+fielder_name = "Left Fielder"
+base_position = Vector2(320, 220)
+
+[node name="CenterFielder" parent="." instance=ExtResource("2_fielder")]
+position = Vector2(640, 160)
+fielder_name = "Center Fielder"
+base_position = Vector2(640, 160)
+
+[node name="RightFielder" parent="." instance=ExtResource("2_fielder")]
+position = Vector2(960, 220)
+fielder_name = "Right Fielder"
+base_position = Vector2(960, 220)

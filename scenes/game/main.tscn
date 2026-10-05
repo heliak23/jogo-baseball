@@ -1,0 +1,55 @@
+[gd_scene load_steps=12 format=3]
+
+[ext_resource type="Script" path="res://scripts/game/game_manager.gd" id="1_gm"]
+[ext_resource type="PackedScene" path="res://scenes/field/field.tscn" id="2_field"]
+[ext_resource type="PackedScene" path="res://scenes/players/catcher.tscn" id="3_catcher"]
+[ext_resource type="PackedScene" path="res://scenes/players/pitcher.tscn" id="4_pitcher"]
+[ext_resource type="PackedScene" path="res://scenes/players/batter.tscn" id="5_batter"]
+[ext_resource type="PackedScene" path="res://scenes/ball/ball.tscn" id="6_ball"]
+[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="7_hud"]
+[ext_resource type="PackedScene" path="res://scenes/game/base_manager.tscn" id="8_bm"]
+[ext_resource type="PackedScene" path="res://scenes/game/defense_manager.tscn" id="9_dm"]
+[ext_resource type="Script" path="res://scripts/game/game_camera.gd" id="10_cam"]
+[ext_resource type="Script" path="res://scripts/game/display_settings.gd" id="11_disp"]
+
+[node name="Main" type="Node2D" node_paths=PackedStringArray("field", "pitcher", "batter", "catcher", "ball", "hud", "base_manager", "defense_manager", "display_settings", "game_camera")]
+script = ExtResource("1_gm")
+field = NodePath("Field")
+pitcher = NodePath("Pitcher")
+batter = NodePath("Batter")
+catcher = NodePath("Catcher")
+ball = NodePath("Ball")
+hud = NodePath("HUD")
+base_manager = NodePath("BaseManager")
+defense_manager = NodePath("DefenseManager")
+display_settings = NodePath("DisplaySettings")
+game_camera = NodePath("GameCamera")
+
+[node name="GameCamera" type="Camera2D" parent="."]
+position = Vector2(640, 360)
+zoom = Vector2(0.96, 0.96)
+script = ExtResource("10_cam")
+
+[node name="DisplaySettings" type="Node" parent="."]
+script = ExtResource("11_disp")
+
+[node name="Field" parent="." instance=ExtResource("2_field")]
+
+[node name="BaseManager" parent="." instance=ExtResource("8_bm")]
+
+[node name="DefenseManager" parent="." instance=ExtResource("9_dm")]
+
+[node name="Catcher" parent="." instance=ExtResource("3_catcher")]
+position = Vector2(640, 655)
+
+[node name="Pitcher" parent="." instance=ExtResource("4_pitcher")]
+position = Vector2(640, 480)
+
+[node name="Batter" parent="." node_paths=PackedStringArray("ball_ref") instance=ExtResource("5_batter")]
+position = Vector2(595, 615)
+ball_ref = NodePath("../Ball")
+
+[node name="Ball" parent="." instance=ExtResource("6_ball")]
+position = Vector2(640, 480)
+
+[node name="HUD" parent="." instance=ExtResource("7_hud")]

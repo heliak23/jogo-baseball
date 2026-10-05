@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/players/batter.gd" id="1_batter"]
+
+[node name="Batter" type="Node2D"]
+position = Vector2(588, 570)
+script = ExtResource("1_batter")

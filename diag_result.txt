@@ -1,0 +1,13 @@
+--- DIAGNOSTICO DE VIEWPORT E STRETCH ---
+root size: (100, 100)
+root content_scale_size: (0, 0)
+root content_scale_mode: 0
+root content_scale_aspect: 0
+root content_scale_factor: 1.0
+DisplayServer window size: (0, 0)
+ProjectSettings display/window/stretch/mode: canvas_items
+ProjectSettings display/window/stretch/aspect: keep
+ProjectSettings display/window/size/viewport_width: 1280
+ProjectSettings display/window/size/viewport_height: 720
+ProjectSettings display/window/size/window_width_override: 0
+ProjectSettings display/window/size/window_height_override: 0
