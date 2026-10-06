@@ -36,7 +36,19 @@ var pitch_duration: float = 0.5
 var pitch_timer: float = 0.0
 var pitch_type: PitchType = PitchType.FASTBALL
 var pitch_curve_strength: float = 0.0
+var pitch_speed: float = 0.0
 var crossed_plate: bool = false
+
+# Propriedade de velocidade calculada para compatibilidade de testes e leituras
+var velocity: Vector2:
+	get:
+		if current_state == State.PITCHING:
+			var dir = (pitch_target - pitch_start).normalized()
+			var spd = pitch_start.distance_to(pitch_target) / maxf(pitch_duration, 0.01)
+			return dir * spd
+		elif current_state == State.HIT or current_state == State.GROUND_ROLL:
+			return velocity_ground
+		return Vector2.ZERO
 
 # Limites do campo para reflexão/quique
 var bounce_dampening: float = 0.50
@@ -57,12 +69,13 @@ func reset_to_pos(new_pos: Vector2) -> void:
 	velocity_ground = Vector2.ZERO
 	velocity_z = 0.0
 	pitch_timer = 0.0
+	pitch_speed = 0.0
 	crossed_plate = false
 	bounces_count = 0
 	position = ground_pos + Vector2(0, -height)
 	queue_redraw()
 
-func start_pitch(start_pos: Vector2, target_pos: Vector2, type: PitchType) -> void:
+func start_pitch(start_pos: Vector2, target_pos: Vector2, type: PitchType, speed_param: float = 0.0) -> void:
 	current_state = State.PITCHING
 	ground_pos = start_pos
 	pitch_start = start_pos
@@ -71,16 +84,27 @@ func start_pitch(start_pos: Vector2, target_pos: Vector2, type: PitchType) -> vo
 	pitch_timer = 0.0
 	crossed_plate = false
 	height = 24.0 # Altura de lançamento das mãos do pitcher
+	pitch_speed = speed_param
 	
+	var distance = start_pos.distance_to(target_pos)
+	if pitch_speed > 0.0:
+		# Duração calculada estritamente pela velocidade do arremesso
+		pitch_duration = maxf(distance / pitch_speed, 0.22)
+	else:
+		match pitch_type:
+			PitchType.FASTBALL:
+				pitch_duration = 0.46 # Rápida, direta
+			PitchType.CURVEBALL:
+				pitch_duration = 0.62 # Mais lenta com curva acentuada
+			PitchType.CHANGEUP:
+				pitch_duration = 0.72 # Bem mais lenta, quebra o timing
+
 	match pitch_type:
 		PitchType.FASTBALL:
-			pitch_duration = 0.46 # Rápida, direta
 			pitch_curve_strength = 0.0
 		PitchType.CURVEBALL:
-			pitch_duration = 0.62 # Mais lenta com curva acentuada
 			pitch_curve_strength = 48.0
 		PitchType.CHANGEUP:
-			pitch_duration = 0.72 # Bem mais lenta, quebra o timing
 			pitch_curve_strength = -18.0
 
 	position = ground_pos + Vector2(0, -height)

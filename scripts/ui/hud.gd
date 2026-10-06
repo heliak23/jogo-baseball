@@ -2,6 +2,8 @@ class_name BaseballHUD
 extends CanvasLayer
 
 signal pitch_button_pressed()
+signal pitch_button_down()
+signal pitch_button_up()
 signal swing_button_pressed()
 signal reset_button_pressed()
 signal pitch_selected(type: int)
@@ -58,6 +60,8 @@ func _setup_button_signals() -> void:
 		btn_changeup.pressed.connect(func(): pitch_selected.emit(3))
 	if btn_pitch:
 		btn_pitch.pressed.connect(func(): pitch_button_pressed.emit())
+		btn_pitch.button_down.connect(func(): pitch_button_down.emit())
+		btn_pitch.button_up.connect(func(): pitch_button_up.emit())
 	if btn_swing:
 		btn_swing.pressed.connect(func(): swing_button_pressed.emit())
 	if btn_reset:
@@ -73,13 +77,25 @@ func update_turn(is_player_batting: bool) -> void:
 	if is_player_batting:
 		turn_label.text = "SUA VEZ NO BASTÃO (ATAQUE) - Pressione ESPAÇO para Rebater"
 		turn_label.modulate = Color(1.0, 0.9, 0.25)
-		if btn_pitch: btn_pitch.modulate.a = 0.4
+		if btn_pitch: 
+			btn_pitch.modulate.a = 0.4
+			btn_pitch.text = "ARREMESSAR [P]"
 		if btn_swing: btn_swing.modulate.a = 1.0
 	else:
-		turn_label.text = "SUA VEZ NO MONTINHO (DEFESA) - Pressione P para Arremessar (1, 2, 3)"
+		turn_label.text = "SUA VEZ NO MONTINHO (DEFESA) - Segure P para Força | Teclas 1, 2, 3"
 		turn_label.modulate = Color(0.3, 0.85, 1.0)
-		if btn_pitch: btn_pitch.modulate.a = 1.0
+		if btn_pitch: 
+			btn_pitch.modulate.a = 1.0
+			btn_pitch.text = "ARREMESSAR [P]"
 		if btn_swing: btn_swing.modulate.a = 0.4
+
+func update_charge_feedback(power: float) -> void:
+	if not btn_pitch:
+		return
+	if power > 0.0:
+		btn_pitch.text = "FORÇA: %d%%" % int(power * 100.0)
+	else:
+		btn_pitch.text = "ARREMESSAR [P]"
 
 func update_display_mode_button(is_fullscreen: bool) -> void:
 	if btn_display_mode:

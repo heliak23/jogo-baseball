@@ -243,7 +243,7 @@ grow_horizontal = 2
 grow_vertical = 0
 theme_override_colors/font_color = Color(0.9, 0.9, 0.9, 0.75)
 theme_override_font_sizes/font_size = 13
-text = "P: Arremessar | ESPAÇO: Rebater | 1, 2, 3: Tipo Pitch | R: Resetar lance"
+text = "P (Segurar): Arremessar com Força | ESPAÇO: Rebater | 1, 2, 3: Tipo Pitch | R: Resetar lance"
 
 [node name="GameOverPanel" type="PanelContainer" parent="."]
 visible = false

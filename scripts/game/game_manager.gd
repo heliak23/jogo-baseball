@@ -127,35 +127,43 @@ func set_state(new_state: MatchState) -> void:
 			_enter_game_over()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_R:
-			if current_state == MatchState.GAME_OVER:
-				start_new_match()
-			else:
-				reset_pitch_play()
-		
-		# Controles de Pitch pelo PLAYER (somente quando estiver na DEFESA)
-		if is_top_inning and current_state == MatchState.AT_BAT:
-			match event.keycode:
-				KEY_1:
-					if pitcher: pitcher.set_pitch_type(1)
-				KEY_2:
-					if pitcher: pitcher.set_pitch_type(2)
-				KEY_3:
-					if pitcher: pitcher.set_pitch_type(3)
-				KEY_P:
-					_on_hud_pitch_pressed()
+	if event is InputEventKey:
+		if event.pressed and not event.echo:
+			if event.keycode == KEY_R:
+				if current_state == MatchState.GAME_OVER:
+					start_new_match()
+				else:
+					reset_pitch_play()
+			
+			# Controles de Pitch pelo PLAYER (somente quando estiver na DEFESA)
+			if is_top_inning and current_state == MatchState.AT_BAT:
+				match event.keycode:
+					KEY_1:
+						if pitcher: pitcher.set_pitch_type(1)
+					KEY_2:
+						if pitcher: pitcher.set_pitch_type(2)
+					KEY_3:
+						if pitcher: pitcher.set_pitch_type(3)
+					KEY_P:
+						_on_hud_pitch_button_down()
 
-		# Controle de Swing pelo PLAYER (somente quando estiver no ATAQUE)
-		if not is_top_inning and (current_state == MatchState.PITCH or current_state == MatchState.BALL_IN_PLAY):
-			if event.keycode == KEY_SPACE:
-				_on_hud_swing_pressed()
+			# Controle de Swing pelo PLAYER (somente quando estiver no ATAQUE)
+			if not is_top_inning and (current_state == MatchState.PITCH or current_state == MatchState.BALL_IN_PLAY):
+				if event.keycode == KEY_SPACE:
+					_on_hud_swing_pressed()
+
+		elif not event.pressed:
+			# Soltura do botão P (just_released) dispara o arremesso carregado
+			if is_top_inning and event.keycode == KEY_P:
+				_on_hud_pitch_button_up()
 
 func _connect_signals() -> void:
 	if pitcher:
 		pitcher.pitch_started.connect(_on_pitch_started)
 		pitcher.pitch_released.connect(_on_pitch_released)
 		pitcher.pitch_type_changed.connect(_on_pitch_type_changed)
+		if pitcher.has_signal("charge_updated"):
+			pitcher.charge_updated.connect(_on_pitcher_charge_updated)
 
 	if batter:
 		batter.swing_started.connect(_on_batter_swing_started)
@@ -169,6 +177,10 @@ func _connect_signals() -> void:
 
 	if hud:
 		hud.pitch_button_pressed.connect(_on_hud_pitch_pressed)
+		if hud.has_signal("pitch_button_down"):
+			hud.pitch_button_down.connect(_on_hud_pitch_button_down)
+		if hud.has_signal("pitch_button_up"):
+			hud.pitch_button_up.connect(_on_hud_pitch_button_up)
 		hud.swing_button_pressed.connect(_on_hud_swing_pressed)
 		hud.reset_button_pressed.connect(reset_pitch_play)
 		hud.pitch_selected.connect(_on_hud_pitch_selected)
@@ -208,6 +220,8 @@ func _enter_at_bat() -> void:
 		ball.reset_to_pos(Vector2(640, 480))
 	if pitcher:
 		pitcher.reset_ready()
+		if "is_player_controlled" in pitcher:
+			pitcher.is_player_controlled = is_top_inning
 	if batter:
 		batter.reset_stance()
 	if defense_manager:
@@ -228,12 +242,12 @@ func _on_cpu_auto_pitch() -> void:
 	if current_state != MatchState.AT_BAT or is_top_inning:
 		return
 	
-	# CPU escolhe o pitch de forma variada e arremessa
+	# 1. CPU escolhe o pitch de forma variada (1: Fastball, 2: Curveball, 3: Changeup)
 	var roll = randf()
 	var pitch_choice = 1 # Fastball
-	if roll < 0.50:
+	if roll < 0.48:
 		pitch_choice = 1 # Fastball
-	elif roll < 0.80:
+	elif roll < 0.78:
 		pitch_choice = 2 # Curveball
 	else:
 		pitch_choice = 3 # Changeup
@@ -241,15 +255,26 @@ func _on_cpu_auto_pitch() -> void:
 	if pitcher:
 		pitcher.set_pitch_type(pitch_choice)
 		set_state(MatchState.PITCH)
-		pitcher.throw_pitch()
+		
+		# 2. CPU simula o "charge" de forma aleatória com variação realista de hold
+		var max_hold = pitcher.max_charge_time if "max_charge_time" in pitcher else 1.2
+		var cpu_hold_time = randf_range(0.12, max_hold)
+		
+		pitcher.start_charging()
+		
+		var charge_timer = get_tree().create_timer(cpu_hold_time)
+		charge_timer.timeout.connect(func():
+			if is_instance_valid(pitcher) and pitcher.current_state == Pitcher.State.CHARGING:
+				pitcher.release_pitch()
+		)
 
-func _on_pitch_released(type: int, start_pos: Vector2, target_pos: Vector2) -> void:
+func _on_pitch_released(type: int, start_pos: Vector2, target_pos: Vector2, speed: float = 0.0) -> void:
 	if ball:
-		ball.start_pitch(start_pos, target_pos, type)
+		ball.start_pitch(start_pos, target_pos, type, speed)
 
 	# Se for a CPU no ATAQUE (PLAYER no montinho arremessando), a CPU decide se vai rebater
 	if is_top_inning:
-		_plan_cpu_swing(type, target_pos)
+		_plan_cpu_swing(type, target_pos, speed)
 
 func _calculate_cpu_swing_probability(pitch_type: int, is_in_zone: bool = true) -> float:
 	var base_chance = cpu_swing_chance_strike if is_in_zone else cpu_swing_chance_ball
@@ -284,7 +309,7 @@ func _calculate_cpu_contact_probability(pitch_type: int, target_pos: Vector2) ->
 
 	return clampf(prob, 0.05, 0.98)
 
-func _plan_cpu_swing(pitch_type: int, target_pos: Vector2) -> void:
+func _plan_cpu_swing(pitch_type: int, target_pos: Vector2, _pitch_speed: float = 0.0) -> void:
 	# 1. Avalia se o arremesso está na Strike Zone
 	var is_in_zone = Baseball.STRIKE_ZONE_RECT.has_point(target_pos)
 
@@ -294,10 +319,12 @@ func _plan_cpu_swing(pitch_type: int, target_pos: Vector2) -> void:
 		# CPU decidiu NÃO rebater (Take Pitch) -> resultará em Called Strike ou Ball
 		return
 
-	# Tempo estimado do arremesso até o Home Plate
-	var pitch_duration = 0.46
-	if pitch_type == 2: pitch_duration = 0.62
-	elif pitch_type == 3: pitch_duration = 0.72
+	# Duração real do arremesso até o Home Plate (obtida da física da bola)
+	var pitch_duration = ball.pitch_duration if ball and ball.pitch_duration > 0.0 else 0.46
+	if pitch_duration <= 0.0:
+		pitch_duration = 0.46
+		if pitch_type == 2: pitch_duration = 0.62
+		elif pitch_type == 3: pitch_duration = 0.72
 
 	# Momento ideal do swing para contato perfeito (0.10s antes da bola cruzar o plate)
 	var ideal_swing_delay = maxf(pitch_duration - 0.10, 0.04)
@@ -416,8 +443,24 @@ func _enter_game_over() -> void:
 
 # --- DISPARO DE AÇÕES PELO PLAYER ---
 
+func _on_pitcher_charge_updated(power: float) -> void:
+	if hud and hud.has_method("update_charge_feedback"):
+		hud.update_charge_feedback(power)
+
+func _on_hud_pitch_button_down() -> void:
+	# O Player só arremessa quando estiver na DEFESA (TOP) e no estado AT_BAT
+	if is_top_inning and current_state == MatchState.AT_BAT and pitcher:
+		if pitcher.current_state == Pitcher.State.READY:
+			set_state(MatchState.PITCH)
+			pitcher.start_charging()
+
+func _on_hud_pitch_button_up() -> void:
+	if is_top_inning and current_state == MatchState.PITCH and pitcher:
+		if pitcher.current_state == Pitcher.State.CHARGING:
+			pitcher.release_pitch()
+
 func _on_hud_pitch_pressed() -> void:
-	# O Player só arremessa quando estiver na DEFESA (TOP)
+	# Fallback para toque simples
 	if is_top_inning and current_state == MatchState.AT_BAT and pitcher:
 		set_state(MatchState.PITCH)
 		pitcher.throw_pitch()
@@ -428,7 +471,7 @@ func _on_hud_swing_pressed() -> void:
 		batter.start_swing()
 
 func _on_hud_pitch_selected(type: int) -> void:
-	if is_top_inning and pitcher and current_state == MatchState.AT_BAT:
+	if is_top_inning and pitcher and (current_state == MatchState.AT_BAT or current_state == MatchState.PITCH):
 		pitcher.set_pitch_type(type)
 
 func _on_pitch_type_changed(type: int) -> void:
